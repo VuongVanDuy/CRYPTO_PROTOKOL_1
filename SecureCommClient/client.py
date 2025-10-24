@@ -44,7 +44,7 @@ class UDPClient:
 
     def client_listen(self, buffer_size: int = 8192):
         """Vòng lặp gửi/nhận tương tác từ bàn phím."""
-        self.socket.bind(('127.0.0.1', self.port_listen))
+        self.socket.bind(('0.0.0.0', self.port_listen))
         # thread_loop_send = threading.Thread(target=self.loop_send_message)
         # thread_loop_send.start()
         print(f"UDP client ready to send to {self.host}:{self.post_send} and receive on port {self.port_listen}")
