@@ -23,6 +23,8 @@ class MainApp:
         self.is_verified: bool = False
         self.udp_client: Optional[UDPClient] = None
         self.running: bool = True
+        self.FLAG_ACTIVE = False
+        self.listener = None
         self.buffer = ""
         self.load_existing_keys()
 
@@ -50,6 +52,7 @@ class MainApp:
         while True:
             try:
                 data, _ = sock.recvfrom(65535)
+                sock.close()
                 return data.decode()
             except socket.timeout:
                 return None
@@ -131,9 +134,23 @@ class MainApp:
                         kernel_encryption=kernel_encryption
                     )
                     # Start listening in a separate thread or process as needed
-                    self.udp_client.client_listen()
+                    #threading.Thread(target=self.udp_client.client_listen).start()
+                    # self.udp_client.client_listen()
+                    self.reset_running()
+                    # self.stop_monitor()
             else:
                 self.buffer = f"Failed to verify certificate: {response.text}\n"
+
+        if option == 4:
+            if self.is_verified and self.udp_client is not None:
+                self.stop_monitor()
+                message = input(f"Enter the message to send to {SUBJECT}: ")
+                self.udp_client.send_message(message)
+                self.buffer += f"Enter the message to send to {SUBJECT}:" + message + "\n"
+                # self.buffer = "Encrypted message sent to Bob.\n"
+                self.start_monitor()
+            else:
+                self.buffer = "Cannot send message. Certificate not verified or UDP client not initialized.\n"
 
 
     def show_console(self):
@@ -163,12 +180,46 @@ class MainApp:
             pass
 
     def start_monitor(self):
+        if self.FLAG_ACTIVE:
+            return
+
+        self.listener = Listener(on_press=self.on_press, on_release=None)
+        self.listener.start()
+        self.FLAG_ACTIVE = True
+
+    def stop_monitor(self):
+        if not self.FLAG_ACTIVE:
+            return
+        if self.listener is not None:
+            self.listener.stop()
+            #self.listener.join(timeout=1.0)
+            self.listener = None
+        self.FLAG_ACTIVE = False
+
+    def reset_running(self):
+        self.stop_monitor()
+        threading.Thread(target=self.start_session).start()
+        self.udp_client.client_listen()
+        self.buffer = ""
+
+    def start_session(self):
         self.show_console()
-        with Listener(on_press=self.on_press, on_release=self.on_release) as listener:
-            listener.join()
+        self.start_monitor()
 
     def run(self):
+        self.show_console()
         self.start_monitor()
+
+        try:
+            # Giữ chương trình chạy
+            while self.running:
+                # Có thể thêm các tác vụ khác ở đây
+                threading.Event().wait(0.1)  # Sleep ngắn để giảm CPU usage
+
+        except KeyboardInterrupt:
+            print("\nShutting down...")
+        finally:
+            self.stop_monitor()
 
 if __name__ == "__main__":
     console_menu = ConsoleMenu()
