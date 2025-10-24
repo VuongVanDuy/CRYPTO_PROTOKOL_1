@@ -10,7 +10,7 @@ CERT_DIRS = "./data/certs"
 ALICE_CERT_PATH = f"{CERT_DIRS}/alice.crt"
 BOB_CERT_PATH = f"{CERT_DIRS}/bob.crt"
 
-HOST_BOB = "127.0.0.1"
+HOST_BOB = "10.0.2.15"
 PORT_LISTEN = 5001
 PORT_SEND = 5000
 SUBJECT = "Bob"
