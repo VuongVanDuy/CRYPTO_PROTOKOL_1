@@ -1,6 +1,6 @@
 import argparse
 import sys
-from .cipher import DesCipher
+from . import DesCipherFile
 
 def main():
     parser = argparse.ArgumentParser(
@@ -30,7 +30,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        des = DesCipher(args.file, args.key, args.iv)
+        des = DesCipherFile(args.file, args.key, args.iv)
         hex_blocks, result = des.generate(
             output_file_path=args.output,
             mode=args.mode,

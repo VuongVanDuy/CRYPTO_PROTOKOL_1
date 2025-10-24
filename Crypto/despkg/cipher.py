@@ -1,9 +1,10 @@
 from typing import Optional, Tuple
+from dataclasses import dataclass
 from .bits import hex_to_bytes_clean
 from .block import generate_subkeys_from_key64
 from .modes import ecb_encrypt, ecb_decrypt, cbc_encrypt, cbc_decrypt
 
-class DesCipher:
+class DesCipherFile:
     def __init__(self, path_file: str, path_key: str, path_iv: Optional[str] = None) -> None:
         self.path_file = path_file
         self.path_key = path_key
@@ -68,5 +69,38 @@ class DesCipher:
                     with open(output_file_path, "w", encoding="utf-8") as f:
                         f.write(plain.decode("utf-8"))
                 return hex_blocks, plain.decode("utf-8")
+        else:
+            raise ValueError("Unsupported mode. Use 'ECB' or 'CBC'.")
+
+class DesCipher:
+    @staticmethod
+    def encrypt(plaintext: bytes, key: bytes, iv: Optional[bytes] = None, mode: str = "ECB") -> bytes:
+        key_bits = [ (byte >> (7 - i)) & 1 for byte in key for i in range(8) ]
+        subkeys = generate_subkeys_from_key64(key_bits)
+
+        if mode.upper() == "ECB":
+            _, cipher = ecb_encrypt(plaintext, subkeys)
+            return cipher
+        elif mode.upper() == "CBC":
+            if iv is None:
+                raise ValueError("IV is required for CBC mode.")
+            _, cipher = cbc_encrypt(plaintext, subkeys, iv)
+            return cipher
+        else:
+            raise ValueError("Unsupported mode. Use 'ECB' or 'CBC'.")
+
+    @staticmethod
+    def decrypt(ciphertext: bytes, key: bytes, iv: Optional[bytes] = None, mode: str = "ECB") -> bytes:
+        key_bits = [ (byte >> (7 - i)) & 1 for byte in key for i in range(8) ]
+        subkeys = generate_subkeys_from_key64(key_bits)
+
+        if mode.upper() == "ECB":
+            _, plain = ecb_decrypt(ciphertext, subkeys)
+            return plain
+        elif mode.upper() == "CBC":
+            if iv is None:
+                raise ValueError("IV is required for CBC mode.")
+            _, plain = cbc_decrypt(ciphertext, subkeys, iv)
+            return plain
         else:
             raise ValueError("Unsupported mode. Use 'ECB' or 'CBC'.")

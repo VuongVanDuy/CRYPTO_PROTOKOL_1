@@ -1,1 +1,0 @@
-Hello, world! My name is DES. DES is a symmetric-key algorithm for the encryption of electronic data.
