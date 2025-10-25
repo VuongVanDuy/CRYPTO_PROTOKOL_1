@@ -107,7 +107,7 @@ class MainApp:
 
         if option == 3:
             data = {
-                "certificate_pem": format_pem(self.cert_pem_Bob)
+                "certificate_pem": self.cert_pem_Bob
             }
             response = requests.post(f"{HOST_CA_SERVER}/cert/verify", json=data)
             if response.status_code == 200:
