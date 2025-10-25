@@ -29,6 +29,21 @@ class UDPClient:
         self.socket.sendto(serialized_envelope, (self.host, self.post_send))
         print(f"Sent {len(serialized_envelope)} bytes to {self.host}:{self.post_send}")
 
+    def receive_message(self, buffer_size: int = 8192) -> str:
+        """Nhận và giải mã thông điệp từ server qua UDP."""
+        received_data, addr = self.socket.recvfrom(buffer_size)  # buffer size
+        print(f"Received {len(received_data)} bytes from {addr}")
+
+        envelope_dict = json.loads(received_data.decode())
+        envelope = {
+            "encrypted_des_key": bytes.fromhex(envelope_dict["encrypted_des_key"]),
+            "encrypted_message": bytes.fromhex(envelope_dict["encrypted_message"]),
+            "signature": bytes.fromhex(envelope_dict["signature"])
+        }
+        decrypted_message = self.kernel_encryption.decrypt_received_digital_envelope(envelope)
+        return decrypted_message.decode(errors="replace")
+
+
     def close(self):
         """Đóng socket UDP."""
         self.socket.close()
@@ -37,16 +52,19 @@ class UDPClient:
         """Gửi thông điệp trong một luồng riêng biệt."""
         try:
             while True:
-                message = input("Enter message to send (or 'exit' to quit): \n")
-                self.send_message(message)
+                message = input("Enter message to send (or 'exit' to quit):")
+                try:
+                  self.send_message(message)
+                except socket.timeout:
+                  continue
         except Exception as e:
             print(f"Error sending message in thread: {e}")
 
-    def client_listen(self, buffer_size: int = 8192):
+    def loop_receive_client(self, buffer_size: int = 8192):
         """Vòng lặp gửi/nhận tương tác từ bàn phím."""
         self.socket.bind(('0.0.0.0', self.port_listen))
-        # thread_loop_send = threading.Thread(target=self.loop_send_message)
-        # thread_loop_send.start()
+        thread_loop_send = threading.Thread(target=self.loop_send_message)
+        thread_loop_send.start()
         print(f"UDP client ready to send to {self.host}:{self.post_send} and receive on port {self.port_listen}")
 
         try:
@@ -77,29 +95,3 @@ class UDPClient:
             if thread_loop_send.is_alive():
                 thread_loop_send.join(0.1)
             print("Socket closed.")
-
-
-def load_key_from_file(file_path: str) -> str:
-    """Đọc nội dung khóa PEM từ file."""
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-
-if __name__ == "__main__":
-    # Đọc khóa RSA và chữ ký
-    private_key_pem_Alice = load_key_from_file("keys/alice_private.pem")
-    public_key_pem_Bob = load_key_from_file("keys/bob_public.pem")
-    privateSign_key_pem_Alice = load_key_from_file("keys/alice_sign_private.pem")
-    publicSign_key_pem_Bob = load_key_from_file("keys/bob_sign_public.pem")
-
-    # Khởi tạo handler
-    Alice_handler = HybirdEncryption.add_keys(
-        private_key_pem_Alice=private_key_pem_Alice,
-        public_key_pem_Bob=public_key_pem_Bob,
-        privateSign_key_pem_Alice=privateSign_key_pem_Alice,
-        publicSign_key_pem_Bob=publicSign_key_pem_Bob
-    )
-
-    # Khởi tạo client UDP (dùng cổng cao hơn 1024 để tránh quyền admin)
-    client = UDPClient(host="127.0.0.1", port=5000, kernel_encryption=Alice_handler)
-    client.client_listen()

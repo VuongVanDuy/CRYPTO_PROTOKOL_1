@@ -1,5 +1,6 @@
-from . import UDPClient, load_key_from_file
+from . import UDPClient
 from SecureCommClient.hybird_encrypt import HybirdEncryption
+from untils import load_key_from_file
 
 if __name__ == "__main__":
     # Load RSA keys from files
@@ -16,4 +17,4 @@ if __name__ == "__main__":
     )
 
     client = UDPClient(host="127.0.0.1", port_listen=9998, port_send=9999, kernel_encryption=Bob_handler)
-    client.client_listen()
+    client.loop_receive_client()

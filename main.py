@@ -134,9 +134,10 @@ class MainApp:
                         kernel_encryption=kernel_encryption
                     )
                     # Start listening in a separate thread or process as needed
-                    #threading.Thread(target=self.udp_client.client_listen).start()
-                    # self.udp_client.client_listen()
-                    self.reset_running()
+                    # threading.Thread(target=self.udp_client.client_listen).start()
+                    self.stop_monitor()
+                    self.udp_client.loop_receive_client()
+                    # self.reset_running()
                     # self.stop_monitor()
             else:
                 self.buffer = f"Failed to verify certificate: {response.text}\n"
@@ -196,15 +197,6 @@ class MainApp:
             self.listener = None
         self.FLAG_ACTIVE = False
 
-    def reset_running(self):
-        self.stop_monitor()
-        threading.Thread(target=self.start_session).start()
-        self.udp_client.client_listen()
-        self.buffer = ""
-
-    def start_session(self):
-        self.show_console()
-        self.start_monitor()
 
     def run(self):
         self.show_console()
