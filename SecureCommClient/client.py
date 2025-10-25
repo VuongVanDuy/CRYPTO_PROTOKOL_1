@@ -27,12 +27,12 @@ class UDPClient:
             "signature": envelope["signature"].hex()
         }).encode()
         self.socket.sendto(serialized_envelope, (self.host, self.post_send))
-        print(f"Sent {len(serialized_envelope)} bytes to {self.host}:{self.post_send}")
+        # print(f"Sent {len(serialized_envelope)} bytes to {self.host}:{self.post_send}")
 
     def receive_message(self, buffer_size: int = 8192) -> str:
         """Nhận và giải mã thông điệp từ server qua UDP."""
         received_data, addr = self.socket.recvfrom(buffer_size)  # buffer size
-        print(f"Received {len(received_data)} bytes from {addr}")
+        # print(f"Received {len(received_data)} bytes from {addr}")
 
         envelope_dict = json.loads(received_data.decode())
         envelope = {

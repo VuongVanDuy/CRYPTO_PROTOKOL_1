@@ -1,11 +1,11 @@
 import threading
-
 from pynput.keyboard import Key, Listener
 import requests
 import socket
+import json
+import time
 from typing import Optional
-from SecureCommClient import UDPClient
-from SecureCommClient import HybirdEncryption
+from SecureCommClient import UDPClient, SignatureError, HybirdEncryption
 from interface import ConsoleMenu
 from Crypto.rsapkg import generateKeyPair, RsaKeyPair
 from config import *
@@ -22,8 +22,8 @@ class MainApp:
         self.cert_pem_Bob: Optional[str] = None
         self.is_verified: bool = False
         self.udp_client: Optional[UDPClient] = None
-        self.running: bool = True
-        self.FLAG_ACTIVE = False
+        self.flag_1: bool = True
+        self.flag_2: bool = False
         self.listener = None
         self.buffer = ""
         self.load_existing_keys()
@@ -39,23 +39,47 @@ class MainApp:
         if not all([self.private_key_pem_Alice, self.public_key_pem_Alice, self.private_sign_key_pem_Alice, self.public_sign_key_pem_Alice]):
             print("One or more keys could not be loaded from the specified paths.")
 
-    def send_certificate(self, cert_pem: str):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(cert_pem.encode(), (HOST_BOB, PORT_SEND))
-
-    def receive_certificate(self) -> str | None:
+    def handshake_certificate(self, cert_pem: str) -> str | None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(('0.0.0.0', PORT_LISTEN))
-        sock.settimeout(10)
+        sock.settimeout(1)
+        signal_Alice = 'not received'
+        cert_received = None
 
         while True:
             try:
-                data, _ = sock.recvfrom(65535)
+                print("sent to bob..")
+                data = {"signal": signal_Alice, "cert_pem": cert_pem}
+                sent = sock.sendto(json.dumps(data).encode(), (HOST_BOB, PORT_SEND))
+                try:
+                    data, _ = sock.recvfrom(65535)
+                except socket.timeout:
+                    continue
+
+                try:
+                    data = json.loads(data.decode())
+                except json.JSONDecodeError as e:
+                    sock.close()
+                    return None
+
+                cert_received = data['cert_pem']
+                signal_Bob = data['signal']
+
+                if cert_received:
+                    signal_Alice = 'received'
+
+                if cert_received and signal_Bob == 'received':
+                    data = {"signal": signal_Alice, "cert_pem": cert_pem}
+                    sock.sendto(json.dumps(data).encode(), (HOST_BOB, PORT_SEND))
+                    sock.close()
+                    return cert_received
+                
+            except Exception as e:
+                print(e)
                 sock.close()
-                return data.decode()
-            except socket.timeout:
                 return None
+
 
     def execute_selection(self):
         option = self.console_menu.current_selection
@@ -95,9 +119,8 @@ class MainApp:
             if not self.cert_pem_Alice:
                 self.buffer = "Certificate not loaded. Please obtain a certificate first.\n"
             else:
-                self.send_certificate(self.cert_pem_Alice)
                 self.buffer = "Certificate sent to Bob.\n"
-                cert_bob_pem = self.receive_certificate()
+                cert_bob_pem = self.handshake_certificate(self.cert_pem_Alice)
                 if cert_bob_pem:
                     with open(BOB_CERT_PATH, "w") as cert_file:
                         cert_file.write(cert_bob_pem)
@@ -112,6 +135,7 @@ class MainApp:
             response = requests.post(f"{HOST_CA_SERVER}/cert/verify", json=data)
             if response.status_code == 200:
                 result = response.json().get("ok", False)
+                print(result)
                 self.buffer = "Certificate is valid.\n" if result else "Certificate is invalid.\n"
                 # generate UDPClient for further communication if verified
                 if result:
@@ -133,30 +157,18 @@ class MainApp:
                         port_listen=PORT_LISTEN,
                         kernel_encryption=kernel_encryption
                     )
-                    # Start listening in a separate thread or process as needed
-                    # threading.Thread(target=self.udp_client.client_listen).start()
+            
                     self.stop_monitor()
-                    self.udp_client.loop_receive_client()
-                    # self.reset_running()
-                    # self.stop_monitor()
+                    self.flag_1 = False
+                    self.flag_2 = True
+                    self.run_session_2()
             else:
                 self.buffer = f"Failed to verify certificate: {response.text}\n"
 
-        if option == 4:
-            if self.is_verified and self.udp_client is not None:
-                self.stop_monitor()
-                message = input(f"Enter the message to send to {SUBJECT}: ")
-                self.udp_client.send_message(message)
-                self.buffer += f"Enter the message to send to {SUBJECT}:" + message + "\n"
-                # self.buffer = "Encrypted message sent to Bob.\n"
-                self.start_monitor()
-            else:
-                self.buffer = "Cannot send message. Certificate not verified or UDP client not initialized.\n"
 
-
-    def show_console(self):
+    def show_console(self, session: int = 1):
         self.console_menu.clear_screen()
-        self.console_menu.draw_console(buffer=self.buffer)
+        self.console_menu.draw_console(session=session, buffer=self.buffer)
 
     def on_press(self, key):
         try:
@@ -174,46 +186,87 @@ class MainApp:
 
     def on_release(self, key):
         try:
-            if key == Key.esc or not self.running:
-                self.running = False
+            if key == Key.esc:
                 return False
         except AttributeError:
-            pass
+            return False
+        except KeyboardInterrupt:
+            return False
 
     def start_monitor(self):
-        if self.FLAG_ACTIVE:
-            return
-
-        self.listener = Listener(on_press=self.on_press, on_release=None)
+        self.listener = Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
-        self.FLAG_ACTIVE = True
+        # self.FLAG_ACTIVE = True
 
     def stop_monitor(self):
-        if not self.FLAG_ACTIVE:
-            return
         if self.listener is not None:
             self.listener.stop()
             #self.listener.join(timeout=1.0)
             self.listener = None
-        self.FLAG_ACTIVE = False
+        # self.FLAG_ACTIVE = False
 
 
-    def run(self):
+    def run_session_1(self):
         self.show_console()
         self.start_monitor()
 
         try:
             # Giữ chương trình chạy
-            while self.running:
+            while True:
                 # Có thể thêm các tác vụ khác ở đây
                 threading.Event().wait(0.1)  # Sleep ngắn để giảm CPU usage
 
         except KeyboardInterrupt:
             print("\nShutting down...")
+            self.stop_monitor()
         finally:
             self.stop_monitor()
+
+    def loop_send_message(self):
+        try:
+            while True:
+                message = input()
+                if message.strip() and message.strip() != '\n':
+                    self.udp_client.send_message(message)
+                    self.buffer = f"You (Alice): {message}\n" + self.buffer
+                self.show_console(session=2)
+        except Exception as e:
+            print(f"Error sending message in thread: {e}")
+
+    def run_session_2(self):
+        self.buffer = "Enter your message ->:"
+        self.show_console(session=2)
+
+        start_monitor_thread = threading.Thread(target=self.loop_send_message)
+        start_monitor_thread.start()
+
+        self.udp_client.socket.bind(('0.0.0.0', self.udp_client.port_listen))
+
+        try:
+            while self.flag_2:
+                try:
+                    received_data = self.udp_client.receive_message()
+                    if received_data.strip():
+                        self.buffer = f'Bob: {received_data}\n' + self.buffer
+                        self.show_console(session=2)
+                except socket.timeout:
+                    continue
+                except SignatureError as e:
+                    self.buffer = f"Error: {e}" + self.buffer
+                    self.show_console(session=2)
+                    
+        except Exception as e:
+            print(f"Error receiving message: {e}")
+        except KeyboardInterrupt:
+            print("Interrupted by user.")
+        finally:
+            self.close()
+            if start_monitor_thread.is_alive():
+                start_monitor_thread.join(0.1)
+            print("Socket closed.")
+
 
 if __name__ == "__main__":
     console_menu = ConsoleMenu()
     app = MainApp(console_menu=console_menu)
-    app.run()
+    app.run_session_1()
