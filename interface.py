@@ -28,7 +28,8 @@ class ConsoleMenu:
             "1. Generate your RSA key",
             "2. Get public key certificate",
             "3. Handshake (public key certificate exchange)",
-            "4. Check certificate reliability"
+            "4. Check certificate reliability",
+            "5. Start chat"
         ]
         self.current_selection = 0
         self.title_enter_msg = "Enter message to send (or 'exit' to quit): "

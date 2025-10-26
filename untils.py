@@ -1,4 +1,6 @@
-import json, base64, textwrap, os
+import json, base64, textwrap, os, re
+import termios
+import sys
 
 def _wrap_pem(b64: str, header: str, footer: str) -> str:
     """Wrap a base64 string with BEGIN/END headers for readability."""
@@ -51,8 +53,38 @@ def format_pem(pem: str) -> str:
     pem_single_line = pem.replace("\r\n", "\n")
     return pem_single_line
 
+def clear_input_buffer():
+    """Clear input buffer - Linux/Mac"""
+    termios.tcflush(sys.stdin, termios.TCIFLUSH)
+    
+def clean_message(message):
+    """
+    Lọc message - chỉ giữ lại ký tự hợp lệ cho tin nhắn
+    """
+    if message is None:
+        return ""
+    
+    cleaned = []
+    
+    for char in message:
+        code = ord(char)
+        # Khoảng trắng thông thường
+        if char == ' ':
+            cleaned.append(char)
+        # Chữ cái và số (A-Z, a-z, 0-9)
+        elif char.isalnum():
+            cleaned.append(char)
+        # Dấu câu cơ bản và ký tự đặc biệt thông dụng
+        elif char in '.,!?:;-_()[]{}@#$%&*+=/\\|<>"\'':
+            cleaned.append(char)
+        # Ký tự tiếng Việt có dấu (trong khoảng Unicode)
+        elif 0x00C0 <= code <= 0x1EF9:  # Ký tự có dấu Latin mở rộng
+            cleaned.append(char)
+    
+    result = ''.join(cleaned).strip()
+    return result
+
 if __name__ == "__main__":
-    # Example usage
     pem_path = "data/keys/alice_public.pem"
     with open(pem_path, "r", encoding="utf-8") as f:
         pem_data = f.read()
